@@ -14,6 +14,11 @@ def test_default_base_url_has_no_trailing_slash():
     assert not app.OPENAI_BASE_URL.endswith("/")
 
 
+def test_text_attachment_is_inlined():
+    text = app.inline_user_content("Review this", [{"name": "hello.py", "content": "print('hi')"}])
+    assert text == 'Review this\n\n<attachment filename="hello.py">\nprint(\'hi\')\n</attachment>'
+
+
 def test_prompt_change_resets_context(tmp_path, monkeypatch):
     monkeypatch.setattr(app, "DB_PATH", tmp_path / "test.db")
     app.init_db()

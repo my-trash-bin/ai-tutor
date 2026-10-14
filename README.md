@@ -23,8 +23,8 @@ The Compose stack includes a privileged Docker-in-Docker service. The app asks t
 - `SERPER_API_KEY` — optional, required for `google_search`.
 - `OPENAI_MODELS` — comma-separated model IDs shown in the UI; defaults to `gpt-5-mini`.
 
-Chat metadata and messages are stored in the `app-data` Docker volume. Uploaded files are sent to the OpenAI Files API with purpose `user_data`; the local database stores their IDs and display names.
+Chat metadata and messages are stored in the `app-data` Docker volume. UTF-8 text attachments are stored locally and included inline in the user message using `<attachment>` blocks. Each file is limited to 1 MB and each request to 4 MB in total.
 
 Changing the system prompt keeps old messages visible but starts a new API context at that point. Changing only the model keeps the current context.
 
-The compatible endpoint must implement the Responses API (`POST /responses`). File attachments additionally require the Files API (`POST /files`). Set `OPENAI_BASE_URL` to the API root including its version prefix, for example `http://host.docker.internal:8080/v1`.
+The compatible endpoint only needs to implement the Responses API (`POST /responses`); the Files API is not used. Set `OPENAI_BASE_URL` to the API root including its version prefix, for example `http://host.docker.internal:8080/v1`.

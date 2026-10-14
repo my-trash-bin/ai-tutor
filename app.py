@@ -157,21 +157,31 @@ def ask_openai(session, history):
     raise RuntimeError("Tool call limit exceeded.")
 
 
-def upload_files(files):
-    key = os.environ.get("OPENAI_API_KEY", "")
-    headers = {"Authorization": f"Bearer {key}"} if key else {}
-    uploaded = []
-    with httpx.Client(trust_env=False, timeout=120) as client:
-        for file in files:
-            if not file.filename:
-                continue
-            content = file.read()
-            if len(content) > 20 * 1024 * 1024:
-                raise ValueError("Files must be 20 MB or smaller.")
-            response = client.post(f"{OPENAI_BASE_URL}/files", headers=headers, data={"purpose": "user_data"}, files={"file": (file.filename, content, file.mimetype or "application/octet-stream")})
-            response.raise_for_status()
-            uploaded.append({"id": response.json()["id"], "name": file.filename, "type": file.mimetype or "application/octet-stream"})
-    return uploaded
+def read_text_files(files):
+    attachments, total = [], 0
+    for file in files:
+        if not file.filename:
+            continue
+        raw = file.read(1_048_577)
+        if len(raw) > 1_048_576:
+            raise ValueError("Each text file must be 1 MB or smaller.")
+        total += len(raw)
+        if total > 4_194_304:
+            raise ValueError("Attached text files must be 4 MB or smaller in total.")
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise ValueError(f"{file.filename} is not a UTF-8 text file.") from exc
+        attachments.append({"name": file.filename, "content": text})
+    return attachments
+
+
+def inline_user_content(content, attachments):
+    chunks = [content] if content else []
+    for item in attachments:
+        filename = json.dumps(item["name"], ensure_ascii=False)
+        chunks.append(f'<attachment filename={filename}>\n{item["content"]}\n</attachment>')
+    return "\n\n".join(chunks)
 
 
 @app.get("/")
@@ -209,7 +219,7 @@ def get_session(session_id):
             return jsonify(error="Session not found."), 404
         messages = [dict(row) for row in connection.execute("SELECT * FROM messages WHERE session_id=? ORDER BY id", (session_id,))]
         for message in messages:
-            message["attachments"] = json.loads(message["attachments"])
+            message["attachments"] = [{"name": item["name"]} for item in json.loads(message["attachments"])]
         return jsonify(session=dict(session), messages=messages)
 
 
@@ -242,7 +252,7 @@ def send_message(session_id):
     if not content and not files:
         return jsonify(error="Message or file is required."), 400
     try:
-        attachments = upload_files(files)
+        attachments = read_text_files(files)
         with db() as connection:
             session = connection.execute("SELECT * FROM sessions WHERE id=?", (session_id,)).fetchone()
             if not session:
@@ -257,16 +267,13 @@ def send_message(session_id):
             if row["role"] == "assistant":
                 history.append({"role": "assistant", "content": row["content"]})
                 continue
-            parts = [{"type": "input_text", "text": row["content"]}] if row["content"] else []
-            for item in json.loads(row["attachments"]):
-                kind = "input_image" if item.get("type", "").startswith("image/") else "input_file"
-                parts.append({"type": kind, "file_id": item["id"]})
-            history.append({"role": "user", "content": parts})
+            text = inline_user_content(row["content"], json.loads(row["attachments"]))
+            history.append({"role": "user", "content": text})
         answer = ask_openai(session, history)
         with db() as connection:
             connection.execute("INSERT INTO messages(session_id,role,content) VALUES(?,?,?)", (session_id, "assistant", answer))
             connection.execute("UPDATE sessions SET updated_at=CURRENT_TIMESTAMP WHERE id=?", (session_id,))
-        return jsonify(content=answer, attachments=attachments)
+        return jsonify(content=answer, attachments=[{"name": item["name"]} for item in attachments])
     except httpx.HTTPStatusError as exc:
         return jsonify(error=f"OpenAI API error ({exc.response.status_code})."), 502
     except (httpx.RequestError, ValueError, RuntimeError) as exc:
