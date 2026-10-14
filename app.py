@@ -56,7 +56,7 @@ def init_db():
 
 class DockerPython:
     def __init__(self, session_id: str):
-        self.name = "neito-" + session_id
+        self.name = "ai-tutor-" + session_id
         self.process = None
         self.lock = threading.Lock()
 
@@ -84,7 +84,7 @@ class DockerPython:
                     "--name", self.name, "--network=none", "--read-only", "--cap-drop=ALL",
                     "--security-opt=no-new-privileges", "--memory=512m", "--cpus=1",
                     "--pids-limit=64", "--user=65534:65534",
-                    "--tmpfs=/tmp:rw,nosuid,nodev,size=128m,mode=1777", "neito-python:local",
+                    "--tmpfs=/tmp:rw,nosuid,nodev,size=128m,mode=1777", "ai-tutor-python:local",
                 ], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
                 if self.receive() != {"ready": True}:
                     raise RuntimeError("Python worker did not start.")

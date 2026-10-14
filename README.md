@@ -1,4 +1,4 @@
-# Neito AI Chat
+# AI Tutor Chat
 
 A small Korean-language web chat for OpenAI models. It provides persistent chat sessions, four fixed system prompts, file attachments, and exactly two tools: a session-scoped Python interpreter and Google search through Serper.
 
