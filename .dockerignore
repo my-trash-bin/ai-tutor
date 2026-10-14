@@ -1,0 +1,6 @@
+.git
+.local
+data
+__pycache__
+*.pyc
+

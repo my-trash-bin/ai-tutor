@@ -1,0 +1,33 @@
+services:
+  docker:
+    image: docker:27-dind
+    privileged: true
+    command: ["--host=tcp://0.0.0.0:2375", "--tls=false"]
+    environment:
+      DOCKER_TLS_CERTDIR: ""
+    volumes:
+      - docker-data:/var/lib/docker
+    healthcheck:
+      test: ["CMD", "docker", "-H", "tcp://localhost:2375", "info"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+  app:
+    build: .
+    depends_on:
+      docker:
+        condition: service_healthy
+    environment:
+      DOCKER_HOST: tcp://docker:2375
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      SERPER_API_KEY: ${SERPER_API_KEY:-}
+      OPENAI_MODELS: ${OPENAI_MODELS:-gpt-5-mini}
+      DATA_DIR: /data
+    ports:
+      - "8000:8000"
+    volumes:
+      - app-data:/data
+volumes:
+  app-data:
+  docker-data:
